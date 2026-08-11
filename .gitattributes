@@ -1,0 +1,4 @@
+# Line endings are part of the code hash: a CRLF checkout would hash
+# differently from an LF one and two honest runners would diverge on a
+# number neither of them changed.
+* text=auto eol=lf

@@ -34,12 +34,24 @@ async function loadRules() {
   return rules;
 }
 
-/** The hash of the code that produced a result — rules included, since a rule is code. */
+/**
+ * The hash of the code that produced a result — rules included, since a rule
+ * is code.
+ *
+ * Line endings are normalised to LF before hashing. Without this, the same
+ * commit checked out on Windows hashes differently from the same commit on
+ * Linux, and two runners diverge on a number neither of them changed. The
+ * repo also pins eol=lf in .gitattributes; this is the belt to that braces,
+ * because a runner's git config is not something this tool can see.
+ */
 async function codeHash() {
   const files = ["docket-lens.mjs", "lib/receipts.mjs"];
   for (const f of (await readdir(join(HERE, "rules"))).sort()) files.push(`rules/${f}`);
   const parts = [];
-  for (const f of files) parts.push(f + "\n" + (await readFile(join(HERE, f), "utf8")));
+  for (const f of files) {
+    const src = (await readFile(join(HERE, f), "utf8")).replace(/\r\n/g, "\n");
+    parts.push(f + "\n" + src);
+  }
   return sha256(parts.join("\n---\n"));
 }
 
