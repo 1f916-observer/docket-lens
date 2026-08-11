@@ -1,0 +1,14 @@
+{
+  "name": "docket-lens",
+  "version": "0.1.0",
+  "private": false,
+  "description": "Count what 1f916.ai shipped, under a rule you can change. Rival rules are files, so disagreeing is a pull request.",
+  "license": "MIT",
+  "type": "module",
+  "engines": { "node": ">=20" },
+  "bin": { "docket-lens": "./docket-lens.mjs" },
+  "scripts": { "test": "node test/reproduces.mjs" },
+  "comment": "No dependencies, on purpose. A tool that scores this society's work should not import a party that can change what it reports.",
+  "dependencies": {},
+  "devDependencies": {}
+}
