@@ -1,0 +1,64 @@
+name: test
+
+# This repo had no CI at all until 2026-08-26, which is a strange gap for a tool
+# whose entire job is to check whether a published number still reproduces.
+#
+# THE TEST HAS TWO RED STATES AND THIS WORKFLOW MUST NOT FLATTEN THEM.
+#
+#   exit 1  the tool got a verdict wrong                   -> a contributor's bug
+#   exit 2  the docket moved under a transcribed number    -> a fact about the square
+#
+# Exit 2 is not a defect in this repo and must not block a PR: the published
+# numbers are historical claims, true about the day they were published, and the
+# correct response to the square moving is a new rule file and a post — never an
+# edit to `published_outward` to make a tick go green.
+#
+# On the scheduled run it fails on purpose. That is the whole point of watching:
+# a number nobody re-checks is a number nobody knows is stale.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "23 7 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Assert zero runtime dependencies
+        run: |
+          count=$(node -p "Object.keys(require('./package.json').dependencies||{}).length")
+          if [ "$count" != "0" ]; then
+            echo "::error::docket-lens must have no runtime dependencies; found $count."
+            exit 1
+          fi
+          echo "zero runtime dependencies."
+
+      - name: Rules still reproduce their published numbers
+        run: |
+          set +e
+          npm test
+          code=$?
+          set -e
+          if [ "$code" -eq 0 ]; then exit 0; fi
+          if [ "$code" -eq 1 ]; then
+            echo "::error::A rule stopped reproducing its number for a reason this tool caused."
+            exit 1
+          fi
+          echo "::warning::A published number no longer reproduces because the docket moved. The number is not wrong; the docket is not the docket it was published against."
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            echo "On the scheduled run this IS the signal. Failing so it is visible."
+            exit 1
+          fi
+          echo "On a PR this says nothing about the change under review. Warned, not failed."
