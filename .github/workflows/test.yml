@@ -16,12 +16,24 @@ name: test
 # On the scheduled run it fails on purpose. That is the whole point of watching:
 # a number nobody re-checks is a number nobody knows is stale.
 
+# TWO SCHEDULES, TWELVE HOURS APART, AND THE REASON IS MEASURED.
+#
+# The first scheduled run of this workflow was due 07:23Z and actually started
+# 18:20Z — GitHub delivers scheduled runs late, sometimes very late, and drops
+# them under load. (A */15 cron on a sibling repo delivered 21 of ~104 runs in
+# 26 hours; a daily one has been reliable but consistently 45-70 minutes late,
+# and this one was eleven hours late.)
+#
+# A once-daily check that is eleven hours late is a check whose answer is
+# eleven hours old. Two entries do not make delivery guaranteed — nothing
+# does — but they halve the worst-case staleness for free.
 on:
   push:
     branches: [main]
   pull_request:
   schedule:
     - cron: "23 7 * * *"
+    - cron: "23 19 * * *"
   workflow_dispatch:
 
 permissions:
@@ -62,3 +74,56 @@ jobs:
             exit 1
           fi
           echo "On a PR this says nothing about the change under review. Warned, not failed."
+
+  # A RED TICK IN THE ACTIONS TAB IS NOT A SIGNAL ANYBODY RECEIVES.
+  #
+  # The scheduled run above fails on purpose when a published number stops
+  # reproducing — that is the whole point of watching. But it failed on
+  # 2026-08-27 at 18:20Z, correctly, naming `payload-repeat-gate: shipped ->
+  # watch`, and nothing happened: no issue, no notification, nobody looking.
+  # A watcher whose alarm rings in an empty room is indistinguishable from a
+  # watcher that never fired, which is the exact failure this repo exists to
+  # refuse about other people's numbers.
+  #
+  # So the scheduled failure becomes a tracked work order, the way the
+  # Observer's coverage drift already does.
+  file-issue:
+    needs: test
+    if: failure() && github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Capture what moved
+        id: drift
+        run: |
+          node test/reproduces.mjs > drift.txt 2>&1 || true
+          {
+            echo 'report<<REPORT_EOF'
+            cat drift.txt
+            echo 'REPORT_EOF'
+          } >> "$GITHUB_OUTPUT"
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const body = `A rule in this repo no longer reproduces the number its author published.\n\n\`\`\`\n${{ steps.drift.outputs.report }}\n\`\`\`\n\nExit 2 means the docket moved under a transcribed number, not that this tool got a verdict wrong. **Do not edit \`published_outward\` to make this green** — the published numbers are historical claims, true about the day they were published. Re-publishing one against today's docket is a NEW claim and needs a new rule file and a post.`;
+            const title = "A published number no longer reproduces";
+            const existing = await github.rest.issues.listForRepo({
+              owner: context.repo.owner, repo: context.repo.repo,
+              state: "open", labels: "drift",
+            });
+            if (existing.data.length) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: existing.data[0].number, body,
+              });
+            } else {
+              await github.rest.issues.create({
+                owner: context.repo.owner, repo: context.repo.repo,
+                title, body, labels: ["drift"],
+              });
+            }
