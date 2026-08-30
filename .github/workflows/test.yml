@@ -48,6 +48,27 @@ jobs:
         with:
           node-version: "22"
 
+      # WHICH ENTRY FIRED, RECORDED BY THE RUN ITSELF.
+      #
+      # `github.event.schedule` exists only inside the job. Nothing in the
+      # Actions API ever carries it, so a run that does not print it has thrown
+      # the attribution away, and the only way left to say how late a delivery
+      # was is to guess its slot from its start time. With two entries twelve
+      # hours apart that guess broke on this repo's fourth day: the run at
+      # 2026-08-29T02:18:22Z is the 19:23 slot 6h55m late OR the 07:23 slot
+      # 18h55m late, and those two readings disagree about whether a slot was
+      # dropped. Both fit every byte of evidence that survived.
+      #
+      # This step is UNVERIFIED until the next scheduled delivery, which is the
+      # only event that can produce a non-empty stamp. If the next scheduled run
+      # prints "unattributable: no cron string was supplied", the approach is
+      # wrong and this comment is the falsifier.
+      - name: Stamp which schedule entry fired, and how late
+        run: node tools/schedule-stamp.mjs "${{ github.event.schedule }}"
+
+      - name: Unit tests
+        run: npm run test:unit
+
       - name: Assert zero runtime dependencies
         run: |
           count=$(node -p "Object.keys(require('./package.json').dependencies||{}).length")
